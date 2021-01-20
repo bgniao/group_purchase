@@ -1,0 +1,109 @@
+version: '2'
+services:
+  #mysql
+  mysql:
+    image: mysql:5.7
+    restart: always
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql/init:/docker-entrypoint-initdb.d/
+      - ./mysql/sql:/opt/sql
+      - ./mysql/conf/mysqld.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+      - /mydata/mysql/log:/var/log/mysql
+      - /mydata/mysql/data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      - MYSQL_ROOT_PASSWORD=123456
+    networks: #加入指定网络
+      - group_purchase
+  #redis
+  redis:
+    image: redis
+    restart: always
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - /mydata/redis/data:/data #数据文件挂载
+    command: redis-server --requirepass 123456
+    networks: #加入指定网络
+      - group_purchase
+  #activemq
+  activemq:
+    image: rmohr/activemq
+    restart: always
+    ports:
+      - "61616:61616"
+      - "8161:8161"
+    container_name: activemq
+    networks: #加入指定网络
+      - group_purchase
+  #mongodb
+  mongodb:
+    image: mongo
+    restart: always
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - /mydata/mongo/db:/data/db #数据文件挂载
+    networks: #加入指定网络
+      - group_purchase
+  #xxl-job
+  xxl-job:
+    image: xuxueli/xxl-job-admin:2.1.2
+    restart: always
+    container_name: xxl-job
+    ports:
+      - "8080:8080"
+    environment:
+      PARAMS: '--spring.datasource.url=jdbc:mysql://mysql:3306/xxl_job?Unicode=true&characterEncoding=UTF-8 --spring.datasource.username=root  --spring.datasource.password=123456  --xxl.job.accessToken=medusaToken'
+    networks: #加入指定网络
+      - group_purchase
+    depends_on:
+      - mysql
+  #group-platform
+  group-platform:
+    image: 111.231.208.4:81/group/platform:master-1.0.0
+    restart: always
+    container_name: group-platform
+    ports:
+      - "8081:8080"
+    volumes:
+      - /data/applogs:/data/applogs
+    networks: #加入指定网络
+      - group_purchase
+    depends_on:
+      - activemq
+      - redis
+      - mysql
+  #group-purchase
+  group-purchase:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    container_name: group-purchase
+    volumes:
+      - /opt/resource/groupmall:/opt/resource/groupmall
+    ports:
+      - "8088:8088"
+      - "9999:9999"
+    environment:
+      PARAMS: '--wechat.open.componentAppId=aaa
+        --wechat.open.componentSecret=bbb
+        --wechat.open.componentToken=ccc
+        --wechat.open.componentAesKey=ddd'
+    networks: #加入指定网络
+      - group_purchase
+    depends_on:
+      - mongodb
+      - activemq
+      - redis
+      - mysql
+      - xxl-job
+networks:
+  group_purchase:
+    driver: bridge
